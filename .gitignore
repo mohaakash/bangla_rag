@@ -19,3 +19,6 @@ Thumbs.db
 cleaned_text.txt
 test_output.txt
 chroma_store/
+
+.env
+*.env
