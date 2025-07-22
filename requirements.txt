@@ -1,0 +1,7 @@
+chromadb
+sentence-transformers
+python-dotenv
+google-generativeai
+pdfplumber
+pymupdf
+nltk
