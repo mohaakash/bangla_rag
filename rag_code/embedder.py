@@ -1,10 +1,11 @@
 from langchain_huggingface import HuggingFaceEmbeddings
 from typing import List, Dict
 import numpy as np
+import torch
 import re
 import warnings
 
-class BengaliEnglishEmbedder:
+class BengaliEmbedder:
     def __init__(self, model_name: str = None, device: str = "cpu"):
         """
         Initialize embedding model optimized for Bengali-English content

@@ -4,12 +4,16 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain_core.prompts import ChatPromptTemplate
 from db import BengaliVectorStore
 import os
+from typing import Dict
+from dotenv import load_dotenv
+
+load_dotenv()  # load from .env
 
 class BengaliRAGSystem:
     def __init__(self, vector_store: BengaliVectorStore):
         # Initialize Gemini
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             temperature=0.3,
             google_api_key=os.getenv("GOOGLE_API_KEY")
         )

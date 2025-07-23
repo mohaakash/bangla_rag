@@ -5,18 +5,20 @@ import io
 import os
 
 # Configure Tesseract path (Windows) - update this to your Tesseract installation
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract.exe'
 
 # OCR configuration for Bengali
 TESSERACT_CONFIG = '--psm 6 -l ben'  # Bengali language, page segmentation mode 6
 
-def pdf_to_images(pdf_path, dpi=300):
+def pdf_to_images(pdf_path, dpi=300, start_page=None, end_page=None):
     """
     Convert PDF pages to images using PyMuPDF (fitz)
     
     Args:
         pdf_path: Path to the PDF file
         dpi: Resolution for image conversion (higher = better quality but slower)
+        start_page: Starting page number (1-based index)
+        end_page: Ending page number (1-based index)
     
     Returns:
         List of PIL Image objects
@@ -26,7 +28,15 @@ def pdf_to_images(pdf_path, dpi=300):
         # Open the PDF file
         doc = fitz.open(pdf_path)
         
-        for page_num in range(len(doc)):
+        # Convert to 0-based index and handle None values
+        start = (start_page - 1) if start_page is not None else 0
+        end = end_page if end_page is not None else len(doc)
+        
+        # Validate page range
+        if start < 0 or end > len(doc) or start >= end:
+            raise ValueError(f"Invalid page range. PDF has {len(doc)} pages.")
+        
+        for page_num in range(start, end):
             # Get the page
             page = doc.load_page(page_num)
             
@@ -73,45 +83,28 @@ def ocr_images_to_text(images):
     
     return extracted_text
 
-def save_text_to_file(text_list, output_file):
+def extract_text_from_pdf(pdf_path: str, start_page: int = None, end_page: int = None) -> str:
     """
-    Save extracted text to a file
-    
-    Args:
-        text_list: List of texts (one per page)
-        output_file: Path to output text file
-    """
-    try:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            for i, text in enumerate(text_list):
-                f.write(f"=== Page {i+1} ===\n")
-                f.write(text)
-                f.write("\n\n")
-        print(f"Successfully saved extracted text to {output_file}")
-    except Exception as e:
-        print(f"Error saving to file: {e}")
+    Extracts text from specified pages of a PDF file by converting them to images and using OCR.
 
-def main():
-    # Input and output paths
-    pdf_path = "HSC26-Bangla1st-Paper.pdf"  # Change to your PDF file
-    output_file = "extracted_text.txt"
-    
-    # Step 1: Convert PDF to images
-    print("Converting PDF to images...")
-    images = pdf_to_images(pdf_path, dpi=300)
+    Args:
+        pdf_path: The path to the PDF file.
+        start_page: Starting page number (1-based index)
+        end_page: Ending page number (1-based index)
+
+    Returns:
+        A single string containing all the extracted text.
+    """
+    print(f"Starting PDF text extraction process for pages {start_page or 1} to {end_page or 'end'}...")
+    images = pdf_to_images(pdf_path, start_page=start_page, end_page=end_page)
     if not images:
         print("Failed to convert PDF to images. Exiting.")
-        return
+        return ""
     
-    # Step 2: Perform OCR on images
     print("Performing OCR on images...")
-    extracted_text = ocr_images_to_text(images)
+    text_list = ocr_images_to_text(images)
     
-    # Step 3: Save extracted text
-    print("Saving extracted text...")
-    save_text_to_file(extracted_text, output_file)
-    
-    print("Process completed! Check the output file.")
+    full_text = "\n".join(text_list)
+    print("Text extraction completed.")
+    return full_text
 
-if __name__ == "__main__":
-    main()
