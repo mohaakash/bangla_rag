@@ -1,242 +1,232 @@
-import nltk
 import re
-from nltk.tokenize import sent_tokenize
-from typing import List
+from typing import List, Dict, Optional
+import warnings
 
-# Download required NLTK data
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
+class BengaliChunker:
+    """
+    A robust chunker optimized for Bengali and mixed-language text with:
+    - Sentence-aware splitting (Danda, punctuation)
+    - Clause-level fallback for long sentences
+    - Dynamic overlap for context preservation
+    - Language detection
+    - Metadata tracking
+    """
 
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-except LookupError:
-    nltk.download('punkt_tab')
-
-def estimate_tokens(text: str) -> int:
-    """
-    Estimate token count for Gemini models.
-    Gemini typically uses ~4 characters per token for English, ~2-3 for Bengali.
-    This is an approximation since we don't have access to Gemini's exact tokenizer.
-    """
-    # Count Bengali characters (Unicode range for Bengali)
-    bengali_chars = len(re.findall(r'[\u0980-\u09FF]', text))
-    # Count other characters
-    other_chars = len(text) - bengali_chars
-    
-    # Rough estimation: Bengali ~2.5 chars/token, English/other ~4 chars/token
-    estimated_tokens = (bengali_chars / 2.5) + (other_chars / 4)
-    return int(estimated_tokens)
-
-def improved_bengali_sentence_split(text: str) -> List[str]:
-    """
-    Improved Bengali sentence splitting that handles more cases.
-    """
-    # Bengali sentence enders: দাঁড়ি (।), প্রশ্ন চিহ্ন (?), বিস্ময় চিহ্ন (!)
-    # Also include English punctuation for mixed content
-    pattern = r'[।!?\.]+(?:\s|$)'
-    
-    sentences = re.split(pattern, text)
-    sentences = [s.strip() for s in sentences if s.strip()]
-    return sentences
-
-def detect_language_mix(text: str) -> str:
-    """
-    Detect if text is primarily Bengali, English, or mixed.
-    """
-    bengali_chars = len(re.findall(r'[\u0980-\u09FF]', text))
-    total_chars = len(re.sub(r'\s+', '', text))
-    
-    if total_chars == 0:
-        return 'english'
-    
-    bengali_ratio = bengali_chars / total_chars
-    
-    if bengali_ratio > 0.7:
-        return 'bengali'
-    elif bengali_ratio > 0.1:
-        return 'mixed'
-    else:
-        return 'english'
-
-def chunk_text_for_gemini(
-    text: str, 
-    max_tokens: int = 1000,  # Gemini 2.5 Flash can handle larger chunks
-    overlap_tokens: int = 100,
-    min_chunk_size: int = 50
-) -> List[str]:
-    """
-    Chunk text optimized for Gemini 2.5 Flash with Bengali and English support.
-    
-    Args:
-        text (str): Input text to chunk
-        max_tokens (int): Maximum tokens per chunk (default 1000 for Gemini)
-        overlap_tokens (int): Overlap between chunks
-        min_chunk_size (int): Minimum tokens for a chunk
-    
-    Returns:
-        List[str]: List of text chunks
-    """
-    if not text.strip():
-        return []
-    
-    # Detect language for appropriate processing
-    language = detect_language_mix(text)
-    
-    # Split into sentences based on detected language
-    if language == 'bengali':
-        sentences = improved_bengali_sentence_split(text)
-    elif language == 'mixed':
-        # For mixed content, try NLTK first, then Bengali splitting
-        try:
-            sentences = sent_tokenize(text, language='english')
-            # Further split any sentences that might contain Bengali punctuation
-            refined_sentences = []
-            for sent in sentences:
-                if re.search(r'[।]', sent):
-                    refined_sentences.extend(improved_bengali_sentence_split(sent))
-                else:
-                    refined_sentences.append(sent)
-            sentences = refined_sentences
-        except:
-            sentences = improved_bengali_sentence_split(text)
-    else:  # English
-        sentences = sent_tokenize(text, language='english')
-    
-    if not sentences:
-        return [text]
-    
-    chunks = []
-    current_chunk = []
-    current_tokens = 0
-    
-    for sentence in sentences:
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-            
-        sentence_tokens = estimate_tokens(sentence)
+    def __init__(
+        self,
+        max_chunk_size: int = 500,
+        overlap: int = 100,
+        min_chunk_size: int = 50,
+        separators: Optional[List[str]] = None
+    ):
+        """
+        Args:
+            max_chunk_size: Maximum characters per chunk
+            overlap: Overlap size between chunks (in chars)
+            min_chunk_size: Minimum chunk size to keep
+            separators: Custom separators (default: Bengali + English punctuation)
+        """
+        self.max_chunk_size = max_chunk_size
+        self.overlap = overlap
+        self.min_chunk_size = min_chunk_size
         
-        # If single sentence exceeds max_tokens, split it further
-        if sentence_tokens > max_tokens:
-            # Split by clauses or phrases
-            parts = re.split(r'[,;:|]', sentence)
-            for part in parts:
-                part = part.strip()
-                if part:
-                    part_tokens = estimate_tokens(part)
-                    if current_tokens + part_tokens > max_tokens and current_chunk:
-                        # Finalize current chunk
-                        chunks.append(' '.join(current_chunk))
-                        
-                        # Handle overlap
-                        if overlap_tokens > 0 and chunks:
-                            overlap_text = []
-                            overlap_token_count = 0
-                            
-                            # Add sentences from end of current chunk for overlap
-                            for i in range(len(current_chunk) - 1, -1, -1):
-                                sent_tokens = estimate_tokens(current_chunk[i])
-                                if overlap_token_count + sent_tokens <= overlap_tokens:
-                                    overlap_text.insert(0, current_chunk[i])
-                                    overlap_token_count += sent_tokens
-                                else:
-                                    break
-                            
-                            current_chunk = overlap_text[:]
-                            current_tokens = overlap_token_count
-                        else:
-                            current_chunk = []
-                            current_tokens = 0
+        # Default separators for Bengali + English
+        self.sentence_separators = separators or [
+            '।', '?', '!',  # Bengali
+            '.', '?', '!'    # English
+        ]
+        
+        self.clause_separators = [',', ';', '|', ':', '-', '–']
+
+    def is_bengali_dominant(self, text: str) -> bool:
+        """Check if text contains >50% Bengali characters"""
+        bengali_chars = len(re.findall(r'[\u0980-\u09FF]', text))
+        total_chars = len(re.sub(r'\s+', '', text))
+        return (bengali_chars / total_chars) > 0.5 if total_chars > 0 else False
+
+    def split_sentences(self, text: str) -> List[str]:
+        """Split text into sentences using language-appropriate separators"""
+        if not text.strip():
+            return []
+
+        # Create regex pattern for sentence boundaries
+        pattern = r'(?<=[{}])\s+'.format(''.join(
+            re.escape(sep) for sep in self.sentence_separators
+        ))
+        
+        sentences = re.split(pattern, text.strip())
+        return [s for s in sentences if s.strip()]
+
+    def split_clauses(self, text: str) -> List[str]:
+        """Split long sentences into clauses"""
+        pattern = r'(?<=[{}])\s+'.format(''.join(
+            re.escape(sep) for sep in self.clause_separators
+        ))
+        return [c for c in re.split(pattern, text) if c.strip()]
+
+    def chunk_text(self, text: str) -> List[Dict]:
+        """
+        Main chunking pipeline with metadata tracking
+        Returns:
+            List of chunks with metadata: {
+                "text": chunk content,
+                "metadata": {
+                    "language": "bn"/"en"/"mixed",
+                    "length_chars": int,
+                    "has_sentence_end": bool,
+                    "overlap_with_next": int
+                }
+            }
+        """
+        if not text.strip():
+            return []
+
+        # Detect language
+        is_bengali = self.is_bengali_dominant(text)
+        language = "bn" if is_bengali else "en"
+        
+        # Split sentences
+        sentences = self.split_sentences(text)
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        overlap_buffer = []
+
+        for sentence in sentences:
+            sent_length = len(sentence)
+            
+            # Case 1: Sentence fits within current chunk
+            if current_length + sent_length <= self.max_chunk_size:
+                current_chunk.append(sentence)
+                current_length += sent_length
+                continue
+                
+            # Case 2: Sentence is too long - split into clauses
+            if sent_length > self.max_chunk_size:
+                clauses = self.split_clauses(sentence)
+                for clause in clauses:
+                    clause_length = len(clause)
                     
-                    current_chunk.append(part)
-                    current_tokens += part_tokens
-            continue
-        
-        # Check if adding this sentence would exceed the limit
-        if current_tokens + sentence_tokens > max_tokens and current_chunk:
-            # Finalize current chunk
-            chunks.append(' '.join(current_chunk))
+                    if current_length + clause_length > self.max_chunk_size:
+                        if current_chunk:
+                            chunks.append(self._finalize_chunk(
+                                current_chunk, language, overlap_buffer
+                            ))
+                            current_chunk = overlap_buffer.copy()
+                            current_length = sum(len(x) for x in overlap_buffer)
+                            overlap_buffer = []
+                            
+                    current_chunk.append(clause)
+                    current_length += clause_length
+                continue
+                
+            # Case 3: Sentence doesn't fit - finalize current chunk
+            if current_chunk:
+                chunks.append(self._finalize_chunk(
+                    current_chunk, language, overlap_buffer
+                ))
+                current_chunk = overlap_buffer.copy()
+                current_length = sum(len(x) for x in overlap_buffer)
+                overlap_buffer = []
+                
+            current_chunk.append(sentence)
+            current_length += sent_length
             
-            # Handle overlap
-            if overlap_tokens > 0:
-                overlap_text = []
-                overlap_token_count = 0
-                
-                # Add sentences from end of current chunk for overlap
-                for i in range(len(current_chunk) - 1, -1, -1):
-                    sent_tokens = estimate_tokens(current_chunk[i])
-                    if overlap_token_count + sent_tokens <= overlap_tokens:
-                        overlap_text.insert(0, current_chunk[i])
-                        overlap_token_count += sent_tokens
-                    else:
-                        break
-                
-                current_chunk = overlap_text[:]
-                current_tokens = overlap_token_count
-            else:
-                current_chunk = []
-                current_tokens = 0
+            # Update overlap buffer
+            if self.overlap > 0:
+                overlap_buffer = self._update_overlap_buffer(
+                    current_chunk, self.overlap
+                )
+
+        # Add final chunk
+        if current_chunk and current_length >= self.min_chunk_size:
+            chunks.append({
+                "text": " ".join(current_chunk),
+                "metadata": {
+                    "language": language,
+                    "length_chars": current_length,
+                    "has_sentence_end": any(
+                        sentence.endswith(tuple(self.sentence_separators))
+                        for sentence in current_chunk
+                    ),
+                    "overlap_with_next": 0  # No next chunk
+                }
+            })
+
+        return chunks
+
+    def _finalize_chunk(self, chunk: List[str], language: str, overlap_buffer: List[str]) -> Dict:
+        """Prepare a complete chunk with metadata"""
+        chunk_text = " ".join(chunk)
+        return {
+            "text": chunk_text,
+            "metadata": {
+                "language": language,
+                "length_chars": len(chunk_text),
+                "has_sentence_end": any(
+                    s.endswith(tuple(self.sentence_separators)) for s in chunk
+                ),
+                "overlap_with_next": sum(len(x) for x in overlap_buffer)
+            }
+        }
+
+    def _update_overlap_buffer(self, current_chunk: List[str], target_overlap: int) -> List[str]:
+        """Maintain overlap context between chunks"""
+        overlap_buffer = []
+        overlap_length = 0
         
-        current_chunk.append(sentence)
-        current_tokens += sentence_tokens
-    
-    # Add the final chunk
-    if current_chunk:
-        final_chunk = ' '.join(current_chunk)
-        if estimate_tokens(final_chunk) >= min_chunk_size:
-            chunks.append(final_chunk)
-        elif chunks:  # Merge with previous chunk if too small
-            chunks[-1] += ' ' + final_chunk
-        else:
-            chunks.append(final_chunk)
-    
-    return chunks
+        # Add sentences from end until we reach target overlap
+        for sentence in reversed(current_chunk):
+            sent_length = len(sentence)
+            if overlap_length + sent_length > target_overlap:
+                break
+            overlap_buffer.insert(0, sentence)
+            overlap_length += sent_length
+            
+        return overlap_buffer
 
-def analyze_chunks(chunks: List[str], text_type: str = ""):
-    """
-    Analyze and display chunk information.
-    """
-    print(f"\n--- {text_type} Chunks Analysis ---")
-    print(f"Total chunks: {len(chunks)}")
-    
-    for i, chunk in enumerate(chunks, 1):
-        token_count = estimate_tokens(chunk)
-        char_count = len(chunk)
-        print(f"Chunk {i}: {token_count} tokens, {char_count} characters")
-        print(f"Preview: {chunk[:100]}{'...' if len(chunk) > 100 else ''}\n")
-
-# Example usage
+# Example Usage
 if __name__ == "__main__":
-    # Test with Bengali text
-    bengali_text = """
-    বাংলাদেশ দক্ষিণ এশিয়ার একটি দেশ। এটি ভারত ও মিয়ানমার দ্বারা বেষ্টিত। 
-    বাংলাদেশের রাজধানী ঢাকা। এখানে অনেক মানুষ বাস করে। 
-    বাংলা ভাষা এখানকার প্রধান ভাষা। এটি একটি সুন্দর দেশ।
-    এখানে অনেক নদী রয়েছে। পদ্মা, যমুনা, মেঘনা প্রধান নদী।
+    # Sample Bengali text with mixed content
+    sample_text = """
+    মামা বিবাহ-বাড়িতে ঢুকিয়া খুশি হইলেন না। একে তো উঠানটাতে বরযাত্রীদের জায়গা সংকুলান হওয়াই শক্ত,
+তাহার পরে সমস্ত আয়োজন নিতান্ত মধ্যম রকমের। ইহার পরে শন্কুনাথবাবুর ব্যবহারটাও নেহাত ঠান্ডা। তার
+বিনয়টা অজজ্র নয়। মুখে তো কথাই নাই কোমরে চাদর বাধা, গলা ভাঙা, টাক-পড়া, মিশ-কালো এবং বিপুল-
+কন্দর্ট পাটির করতাল-বাজিয়ে হইতে শুরু করিয়া বরকর্তাদের প্রত্যেককে বার বার প্রচুররূপে অভিষিক্ত
+করিয়া না দিতেন তবে গোড়াতেই এটা এসপার-ওসপার হইত।
+আমি সভায় বসিবার কিছুক্ষণ পরেই মামা শস্তুনাথবাবুকে পাশের ঘরে ডাকিয়া লইয়া গেলেন। কী কথা হইল
+জানি না, কিছুক্ষণ পরেই শস্তুনাথবাবু আমাকে আসিইয়া বলিলেন, “বাবাজি, একবার এই দিকে আসতে
+হচ্ছে।”
+ব্যাপারখানা এই। -সকলে না হউক, কিন্তু কোনো চর পন + ভু
+সওগাদ লোক-বিদায় প্রভৃতি সম্বন্ধে যেরকম এ ্
+টানাটানির পরিচয় পাওয়া গেছে তাহাতে মামা
+ঠিক করিয়াছিলেন- দেওয়া-থোওয়া সম্বন্ধে এ লোকটির শুধু মুখের কথার উপর ভর করা চলিবে না। সেইজন্য
+বাড়ির সেকরাকে সুদ্ধ সঙ্গেআনিয়াছিলেন। পাশের ঘরে গিয়া দেখিলাম, মামা এক তক্তপোশে এবং সেকরা
+তাহার দীড়িপাল্লা কষ্টিপাথর প্রভৃতি লইয়া মেঝেয় বসিয়া আছে।
+শস্তুনাথবাবু আমাকে বলিলেন, “তোমার মামা বলিতেছেন বিবাহের কাজ শুরু হইবার আগেই তিনি কনের
+আমি মাথা হেট করিয়া চুপ করিয়া রহিলাম।
+মামা বলিলেন, “ও আবার কী বলিবে। আমি যা বলিব তাই হইবে।”
+শস্তুনাথবাবু আমার দিকে চাহিয়া কহিলেন, “সেই কথা তবে ঠিক? উনি যা বলিলেন তাই হইবে? এ সম্বন্ধে
+আমি একটু ঘাড়-নাড়ার ইঙ্গিতে জানাইলাম, এসব কথায় আমার সম্পুর্ণ অনধিকার।
+মামা বলিলেন, “অনুপম এখানে কি করিবে। ও সভায় গিয়ে বসুক।”
+কিছুক্ষণ পরে তিনি একখানা গামছায় বাঁধা গহনা আনিয়া তক্তপোশের উপর মেলিয়া ধরিলেন। সমস্তই তাহার
+সেকরা গহনা হাতে তুলিয়া লইয়া বলিল, “এ আর দেখিব কী। ইহাতে খাদ নাই-এমন সোনা এখনকার দিনে
+ব্যবহারই হয় না।
     """
-    
-    # Test with English text
-    english_text = """
-    Bangladesh is a country in South Asia. It is surrounded by India and Myanmar.
-    The capital of Bangladesh is Dhaka. Many people live here.
-    Bengali is the main language here. It is a beautiful country.
-    There are many rivers here. Padma, Jamuna, Meghna are the main rivers.
-    """
-    
-    # Test with mixed content
-    mixed_text = """
-    Bangladesh বা বাংলাদেশ is a South Asian country। It has a rich cultural heritage.
-    The people here speak Bengali বা বাংলা ভাষা। Dhaka ঢাকা is the capital city.
-    """
-    
-    # Test chunking
-    bengali_chunks = chunk_text_for_gemini(bengali_text, max_tokens=50, overlap_tokens=10)
-    analyze_chunks(bengali_chunks, "Bengali")
-    
-    english_chunks = chunk_text_for_gemini(english_text, max_tokens=50, overlap_tokens=10)
-    analyze_chunks(english_chunks, "English")
-    
-    mixed_chunks = chunk_text_for_gemini(mixed_text, max_tokens=50, overlap_tokens=10)
-    analyze_chunks(mixed_chunks, "Mixed")
+
+    # Initialize chunker with recommended settings for Bengali
+    chunker = BengaliChunker(
+        max_chunk_size=300,
+        overlap=50,
+        min_chunk_size=30
+    )
+
+    # Process text
+    chunks = chunker.chunk_text(sample_text)
+
+    # Display results
+    print(f"Generated {len(chunks)} chunks:\n")
+    for i, chunk in enumerate(chunks, 1):
+        print(f"Chunk {i}:")
+        print(f"Text: {chunk['text']}")
+        print(f"Metadata: {chunk['metadata']}\n")

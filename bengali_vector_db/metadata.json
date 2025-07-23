@@ -1,0 +1,18 @@
+[
+  {
+    "id": 0,
+    "text": "বাংলাদেশের রাজধানী ঢাকা",
+    "metadata": {
+      "language": "bn",
+      "source": "geography"
+    }
+  },
+  {
+    "id": 1,
+    "text": "The capital of Bangladesh is Dhaka",
+    "metadata": {
+      "language": "en",
+      "source": "geography"
+    }
+  }
+]

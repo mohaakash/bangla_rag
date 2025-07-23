@@ -1,36 +1,47 @@
-import sys
-import codecs
+from db import BengaliVectorStore
+from llm import BengaliRAGSystem
+from embedder import BengaliEmbedder
+from chunker import BengaliChunker
 import os
-import shutil
 
-sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+# Initialize components
+embedder = BengaliEmbedder()
+chunker = BengaliChunker()
+vector_db = BengaliVectorStore()
+rag = BengaliRAGSystem(vector_db)
 
-from db import create_chroma_collection, insert_text_to_chroma
-from rag import setup_gemini, answer_question
+# Example document processing pipeline
+def process_documents(pdf_path: str):
+    # 1. Extract text (from your extractor.py)
+    text = extract_text_from_pdf(pdf_path)
+    
+    # 2. Chunk text
+    chunks = chunker.chunk_text(text)
+    
+    # 3. Embed and store
+    embedded_chunks = embedder.embed_chunks(chunks)
+    vector_db.create_from_texts(
+        texts=[chunk["text"] for chunk in embedded_chunks],
+        metadatas=[chunk["metadata"] for chunk in embedded_chunks]
+    )
+    vector_db.save_local("vector_db")
 
-# Define the path to the cleaned text file
-CLEANED_TEXT_FILE = os.path.join(os.path.dirname(__file__), "..", "cleaned_text.txt")
+# Example query
+def ask_question(question: str):
+    response = rag.ask(question)
+    print(f"Q: {question}")
+    print(f"A: {response['answer']}")
+    print("Sources:")
+    for src in response["sources"]:
+        print(f"- {src.get('source', 'Unknown')}")
 
-# Define the Chroma store directory
-CHROMA_STORE_DIR = os.path.join(os.path.dirname(__file__), "..", "chroma_store")
-
-# Delete the existing Chroma collection to ensure fresh data with new chunking
-if os.path.exists(CHROMA_STORE_DIR):
-    shutil.rmtree(CHROMA_STORE_DIR)
-    print(f"Deleted existing Chroma store at {CHROMA_STORE_DIR}")
-
-collection = create_chroma_collection()
-model = setup_gemini()
-
-# Read the cleaned text
-with open(CLEANED_TEXT_FILE, "r", encoding="utf-8") as f:
-    cleaned_text = f.read()
-
-# Insert the cleaned text into ChromaDB using the new chunking strategy
-# Assuming the text is primarily Bengali, set language='bengali'
-insert_text_to_chroma(cleaned_text, collection, language="bengali")
-
-question = "কাকে অনুপমের ভাগ্যদেবতা বলে উল্লেখ করা হয়েছে?"
-response = answer_question(collection, question, model)
-
-print("Gemini Answer:", response)
+if __name__ == "__main__":
+    # Process documents (one-time)
+    process_documents("HSC26-Bangla1st-Paper.pdf")
+    
+    # Interactive Q&A
+    while True:
+        question = input("\nAsk a question (or 'quit'): ")
+        if question.lower() == 'quit':
+            break
+        ask_question(question)
