@@ -14,20 +14,13 @@ class BengaliChunker:
 
     def __init__(
         self,
-        max_chunk_size: int = 200,
+        max_chunk_size: int = 400,
         overlap: int = 50,
-        min_chunk_size: int = 20,
+        min_chunk_size: int = 200,
         separators: Optional[List[str]] = None,
         discourse_markers: Optional[List[str]] = None
     ):
-        """
-        Args:
-            max_chunk_size: Maximum characters per chunk
-            overlap: Target overlap size between chunks (in chars)
-            min_chunk_size: Minimum chunk size to keep
-            separators: Custom separators (default: Bengali + English punctuation)
-            discourse_markers: Bengali discourse markers for better splitting
-        """
+
         self.max_chunk_size = max_chunk_size
         self.overlap = overlap
         self.min_chunk_size = min_chunk_size
@@ -331,37 +324,3 @@ class BengaliChunker:
                 )
             }
         }
-
-# Example usage and testing
-if __name__ == "__main__":
-    # Sample Bengali text with mixed content
-    sample_text = """
-    মামা বিবাহ-বাড়িতে ঢুকিয়া খুশি হইলেন না। একে তো উঠানটাতে বরযাত্রীদের জায়গা সংকুলান হওয়াই শক্ত,
-    তাহার পরে সমস্ত আয়োজন নিতান্ত মধ্যম রকমের। ইহার পরে শঙ্কুনাথবাবুর ব্যবহারটাও নেহাত ঠান্ডা। 
-    কিন্তু তার বিনয়টা অজাত্র নয়। This is an English sentence mixed in. মুখে তো কথাই নাই কোমরে চাদর বাঁধা, 
-    গলা ভাঙা, টাক-পড়া, মিশ-কালো এবং বিপুল-কণ্ঠের একটা লোক AI technology ব্যবহার করে কাজ করছে।
-    তবে আমি সভায় বসিবার কিছুক্ষণ পরেই মামা শঙ্কুনাথবাবুকে পাশের ঘরে ডাকিয়া লইয়া গেলেন।
-    """
-
-    # Initialize enhanced chunker
-    chunker = BengaliChunker(
-        max_chunk_size=300,
-        overlap=80,
-        min_chunk_size=50
-    )
-
-    # Process text
-    chunks = chunker.chunk_text(sample_text)
-
-    # Display results
-    print(f"Generated {len(chunks)} chunks:\n")
-    for i, chunk in enumerate(chunks, 1):
-        print(f"Chunk {i}:")
-        print(f"Text: {chunk['text'][:100]}{'...' if len(chunk['text']) > 100 else ''}")
-        print(f"Language: {chunk['metadata']['language']}")
-        print(f"Bengali ratio: {chunk['metadata']['bengali_ratio']:.2f}")
-        print(f"English ratio: {chunk['metadata']['english_ratio']:.2f}")
-        print(f"Length: {chunk['metadata']['length_chars']} chars")
-        print(f"Has discourse markers: {chunk['metadata']['has_discourse_markers']}")
-        print(f"Overlap with next: {chunk['metadata']['overlap_with_next']}")
-        print("-" * 50)

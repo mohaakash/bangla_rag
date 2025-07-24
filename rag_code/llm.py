@@ -28,7 +28,7 @@ class BengaliRAGSystem:
         
         # Bilingual prompt template
         self.prompt = ChatPromptTemplate.from_template("""
-        [System] Answer in the same language as the question.
+        [System] Answer in the same language as the question.Do not explain the answer keep things short.
         Use the following context and conversation history:
         
         প্রসঙ্গ/Context:
@@ -43,7 +43,7 @@ class BengaliRAGSystem:
         # Create retrieval chain
         self.retrieval_chain = ConversationalRetrievalChain.from_llm(
             llm=self.llm,
-            retriever=vector_store.as_retriever(k=4),
+            retriever=vector_store.as_retriever(k=7),
             memory=self.memory,
             combine_docs_chain_kwargs={"prompt": self.prompt},
             return_source_documents=True,

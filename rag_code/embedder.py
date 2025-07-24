@@ -7,19 +7,10 @@ import warnings
 
 class BengaliEmbedder:
     def __init__(self, model_name: str = None, device: str = "cpu"):
-        """
-        Initialize embedding model optimized for Bengali-English content
-        
-        Args:
-            model_name: Optional custom model name
-            device: "cpu" or "cuda"
-        """
         self.model = self._initialize_model(model_name, device)
         self.embedding_dim = self._get_embedding_dim()
         
     def _initialize_model(self, model_name: str, device: str):
-        """Load best available multilingual embedding model"""
-        # Suppress specific LangChain deprecation warnings
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=DeprecationWarning)
             
@@ -33,30 +24,19 @@ class BengaliEmbedder:
             )
 
     def _get_embedding_dim(self) -> int:
-        """Get embedding dimension size for database configuration"""
         dummy_text = "test"
         return len(self.model.embed_query(dummy_text))
 
+    # Preprocess text to standardize Bengali punctuation and whitespace
+    # This is a simplified version, you can expand it based on your needs
     def preprocess_text(self, text: str) -> str:
-        """Normalize Bengali-English text before embedding"""
-        # Standardize Bengali punctuation
         text = re.sub(r'[।]+', '।', text)  # Multiple dandas to single
-        # Normalize whitespace and special characters
         text = re.sub(r'[\s]+', ' ', text).strip()
         return text
 
+    # Embed a list of text chunks with metadata
+    # Each chunk should be a dict with 'text' and 'metadata' keys
     def embed_chunks(self, chunks: List[Dict]) -> List[Dict]:
-        """
-        Embed text chunks with metadata preservation
-        
-        Args:
-            chunks: List of chunk dicts from chunker.py
-                   Format: [{"text": "...", "metadata": {...}}, ...]
-        
-        Returns:
-            List of dicts with embeddings and metadata
-            Format: [{"text": "...", "embedding": [...], "metadata": {...}}, ...]
-        """
         if not chunks:
             return []
 
@@ -76,25 +56,3 @@ class BengaliEmbedder:
             }
         } for chunk, embedding in zip(chunks, embeddings)]
 
-if __name__ == "__main__":
-    # Test with sample chunks (matching chunker.py output format)
-    sample_chunks = [
-        {
-            "text": "বাংলাদেশ দক্ষিণ এশিয়ার একটি দেশ।",
-            "metadata": {"language": "bn", "length": 34}
-        },
-        {
-            "text": "The capital is Dhaka.",
-            "metadata": {"language": "en", "length": 18}
-        }
-    ]
-    
-    # Initialize with automatic device detection
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    embedder = BengaliEmbedder(device=device)
-    
-    embedded_chunks = embedder.embed_chunks(sample_chunks)
-    
-    print(f"Using device: {device}")
-    print(f"Embedding dimension: {embedder.embedding_dim}")
-    print(f"First chunk embedding (sample): {embedded_chunks[0]['embedding'][:5]}...")
