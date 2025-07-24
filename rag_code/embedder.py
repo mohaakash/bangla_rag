@@ -91,7 +91,7 @@ if __name__ == "__main__":
     
     # Initialize with automatic device detection
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    embedder = BengaliEnglishEmbedder(device=device)
+    embedder = BengaliEmbedder(device=device)
     
     embedded_chunks = embedder.embed_chunks(sample_chunks)
     

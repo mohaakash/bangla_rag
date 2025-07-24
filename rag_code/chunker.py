@@ -1,48 +1,86 @@
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import warnings
 
 class BengaliChunker:
     """
-    A robust chunker optimized for Bengali and mixed-language text with:
-    - Sentence-aware splitting (Danda, punctuation)
-    - Clause-level fallback for long sentences
-    - Dynamic overlap for context preservation
-    - Language detection
-    - Metadata tracking
+    Enhanced chunker optimized for Bengali and mixed-language text with:
+    - Improved script mixing detection
+    - Word-boundary aware overlap
+    - Bengali discourse markers
+    - Better clause detection
+    - Semantic unit preservation
     """
 
     def __init__(
         self,
-        max_chunk_size: int = 500,
-        overlap: int = 100,
-        min_chunk_size: int = 50,
-        separators: Optional[List[str]] = None
+        max_chunk_size: int = 200,
+        overlap: int = 50,
+        min_chunk_size: int = 20,
+        separators: Optional[List[str]] = None,
+        discourse_markers: Optional[List[str]] = None
     ):
         """
         Args:
             max_chunk_size: Maximum characters per chunk
-            overlap: Overlap size between chunks (in chars)
+            overlap: Target overlap size between chunks (in chars)
             min_chunk_size: Minimum chunk size to keep
             separators: Custom separators (default: Bengali + English punctuation)
+            discourse_markers: Bengali discourse markers for better splitting
         """
         self.max_chunk_size = max_chunk_size
         self.overlap = overlap
         self.min_chunk_size = min_chunk_size
         
-        # Default separators for Bengali + English
+        # Enhanced separators for Bengali + English
         self.sentence_separators = separators or [
-            '।', '?', '!',  # Bengali
-            '.', '?', '!'    # English
+            '।', '॥',  # Bengali danda and double danda
+            '.', '?', '!', '…'  # English punctuation
         ]
         
-        self.clause_separators = [',', ';', '|', ':', '-', '–']
+        self.clause_separators = [',', ';', '|', ':', '-', '–', '—']
+        
+        # Bengali discourse markers for better semantic splitting
+        self.discourse_markers = discourse_markers or [
+            'কিন্তু', 'তবে', 'সেজন্য', 'তাই', 'অতএব', 'কারণ', 
+            'যদিও', 'তথাপি', 'তবুও', 'অথচ', 'বরং', 'আর',
+            'এবং', 'ও', 'অথবা', 'কিংবা', 'নাকি'
+        ]
 
-    def is_bengali_dominant(self, text: str) -> bool:
-        """Check if text contains >50% Bengali characters"""
-        bengali_chars = len(re.findall(r'[\u0980-\u09FF]', text))
-        total_chars = len(re.sub(r'\s+', '', text))
-        return (bengali_chars / total_chars) > 0.5 if total_chars > 0 else False
+    def detect_script_composition(self, text: str) -> Dict[str, float]:
+        """Analyze script composition of text"""
+        if not text.strip():
+            return {"bengali": 0.0, "english": 0.0, "other": 0.0}
+        
+        # Remove whitespace for accurate counting
+        clean_text = re.sub(r'\s+', '', text)
+        total_chars = len(clean_text)
+        
+        if total_chars == 0:
+            return {"bengali": 0.0, "english": 0.0, "other": 0.0}
+        
+        bengali_chars = len(re.findall(r'[\u0980-\u09FF]', clean_text))
+        english_chars = len(re.findall(r'[a-zA-Z]', clean_text))
+        other_chars = total_chars - bengali_chars - english_chars
+        
+        return {
+            "bengali": bengali_chars / total_chars,
+            "english": english_chars / total_chars,
+            "other": other_chars / total_chars
+        }
+
+    def classify_language(self, text: str) -> str:
+        """Classify text language based on script composition"""
+        composition = self.detect_script_composition(text)
+        
+        if composition["bengali"] > 0.6:
+            return "bn"
+        elif composition["english"] > 0.6:
+            return "en"
+        elif composition["bengali"] > 0.3 or composition["english"] > 0.3:
+            return "mixed"
+        else:
+            return "other"
 
     def split_sentences(self, text: str) -> List[str]:
         """Split text into sentences using language-appropriate separators"""
@@ -50,175 +88,266 @@ class BengaliChunker:
             return []
 
         # Create regex pattern for sentence boundaries
-        pattern = r'(?<=[{}])\s+'.format(''.join(
-            re.escape(sep) for sep in self.sentence_separators
-        ))
+        separators_pattern = '|'.join(re.escape(sep) for sep in self.sentence_separators)
+        pattern = f'(?<=[{separators_pattern}])\\s+'
         
         sentences = re.split(pattern, text.strip())
-        return [s for s in sentences if s.strip()]
+        return [s.strip() for s in sentences if s.strip()]
+
+    def split_by_discourse_markers(self, text: str) -> List[str]:
+        """Split text using Bengali discourse markers"""
+        if not text.strip():
+            return [text]
+        
+        # Create pattern for discourse markers (word boundaries)
+        markers_pattern = '|'.join(re.escape(marker) for marker in self.discourse_markers)
+        pattern = f'\\b({markers_pattern})\\b'
+        
+        # Split but keep the markers
+        parts = re.split(f'({pattern})', text)
+        
+        # Reconstruct with markers attached to following text
+        result = []
+        current = ""
+        
+        for part in parts:
+            if part.strip():
+                if any(marker in part for marker in self.discourse_markers):
+                    if current:
+                        result.append(current.strip())
+                        current = part
+                    else:
+                        current = part
+                else:
+                    current += part
+        
+        if current:
+            result.append(current.strip())
+        
+        return [r for r in result if r.strip()]
 
     def split_clauses(self, text: str) -> List[str]:
-        """Split long sentences into clauses"""
-        pattern = r'(?<=[{}])\s+'.format(''.join(
-            re.escape(sep) for sep in self.clause_separators
-        ))
-        return [c for c in re.split(pattern, text) if c.strip()]
+        """Enhanced clause splitting with discourse markers"""
+        # First try discourse markers
+        discourse_splits = self.split_by_discourse_markers(text)
+        
+        if len(discourse_splits) > 1:
+            return discourse_splits
+        
+        # Fallback to punctuation-based splitting
+        pattern = '|'.join(re.escape(sep) for sep in self.clause_separators)
+        pattern = f'(?<=[{pattern}])\\s+'
+        
+        clauses = re.split(pattern, text)
+        return [c.strip() for c in clauses if c.strip()]
+
+    def find_word_boundary_split(self, text: str, target_pos: int) -> int:
+        """Find the nearest word boundary before target_pos"""
+        if target_pos >= len(text):
+            return len(text)
+        
+        # Look backwards from target_pos to find word boundary
+        for i in range(target_pos, max(0, target_pos - 50), -1):
+            if i == 0 or text[i-1].isspace():
+                return i
+        
+        # If no word boundary found, return target_pos
+        return target_pos
+
+    def create_word_boundary_overlap(self, chunks_so_far: List[str], target_overlap: int) -> List[str]:
+        """Create overlap that respects word boundaries"""
+        if not chunks_so_far:
+            return []
+        
+        overlap_text = ""
+        overlap_chunks = []
+        
+        # Add chunks from the end until we reach target overlap
+        for chunk in reversed(chunks_so_far):
+            if len(overlap_text) + len(chunk) > target_overlap:
+                # Find word boundary within this chunk
+                remaining_space = target_overlap - len(overlap_text)
+                if remaining_space > 20:  # Only if significant space remains
+                    split_pos = self.find_word_boundary_split(chunk, remaining_space)
+                    partial_chunk = chunk[:split_pos].strip()
+                    if partial_chunk:
+                        overlap_chunks.insert(0, partial_chunk)
+                break
+            
+            overlap_chunks.insert(0, chunk)
+            overlap_text += chunk + " "
+        
+        return overlap_chunks
 
     def chunk_text(self, text: str) -> List[Dict]:
         """
-        Main chunking pipeline with metadata tracking
-        Returns:
-            List of chunks with metadata: {
-                "text": chunk content,
-                "metadata": {
-                    "language": "bn"/"en"/"mixed",
-                    "length_chars": int,
-                    "has_sentence_end": bool,
-                    "overlap_with_next": int
-                }
-            }
+        Enhanced chunking pipeline with improved overlap and language detection
         """
         if not text.strip():
             return []
 
-        # Detect language
-        is_bengali = self.is_bengali_dominant(text)
-        language = "bn" if is_bengali else "en"
+        # Detect overall language composition
+        overall_composition = self.detect_script_composition(text)
         
-        # Split sentences
+        # Split into sentences
         sentences = self.split_sentences(text)
+        if not sentences:
+            return []
+
         chunks = []
         current_chunk = []
         current_length = 0
-        overlap_buffer = []
 
         for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+                
             sent_length = len(sentence)
             
-            # Case 1: Sentence fits within current chunk
-            if current_length + sent_length <= self.max_chunk_size:
+            # Case 1: Sentence fits in current chunk
+            if current_length + sent_length + 1 <= self.max_chunk_size:  # +1 for space
                 current_chunk.append(sentence)
-                current_length += sent_length
+                current_length += sent_length + (1 if current_chunk else 0)
                 continue
+            
+            # Case 2: Current chunk needs to be finalized
+            if current_chunk:
+                chunk_text = " ".join(current_chunk)
+                overlap_chunks = self.create_word_boundary_overlap(current_chunk, self.overlap)
                 
-            # Case 2: Sentence is too long - split into clauses
+                chunks.append(self._create_chunk_dict(
+                    chunk_text, 
+                    overall_composition,
+                    len(" ".join(overlap_chunks))
+                ))
+                
+                # Start new chunk with overlap
+                current_chunk = overlap_chunks.copy()
+                current_length = sum(len(chunk) + 1 for chunk in current_chunk)
+                current_length = max(0, current_length - 1)  # Remove last space
+            
+            # Case 3: Handle long sentences
             if sent_length > self.max_chunk_size:
                 clauses = self.split_clauses(sentence)
+                
                 for clause in clauses:
+                    clause = clause.strip()
+                    if not clause:
+                        continue
+                        
                     clause_length = len(clause)
                     
-                    if current_length + clause_length > self.max_chunk_size:
-                        if current_chunk:
-                            chunks.append(self._finalize_chunk(
-                                current_chunk, language, overlap_buffer
-                            ))
-                            current_chunk = overlap_buffer.copy()
-                            current_length = sum(len(x) for x in overlap_buffer)
-                            overlap_buffer = []
-                            
-                    current_chunk.append(clause)
-                    current_length += clause_length
-                continue
-                
-            # Case 3: Sentence doesn't fit - finalize current chunk
-            if current_chunk:
-                chunks.append(self._finalize_chunk(
-                    current_chunk, language, overlap_buffer
-                ))
-                current_chunk = overlap_buffer.copy()
-                current_length = sum(len(x) for x in overlap_buffer)
-                overlap_buffer = []
-                
-            current_chunk.append(sentence)
-            current_length += sent_length
-            
-            # Update overlap buffer
-            if self.overlap > 0:
-                overlap_buffer = self._update_overlap_buffer(
-                    current_chunk, self.overlap
-                )
+                    # If clause still too long, force split at word boundary
+                    if clause_length > self.max_chunk_size:
+                        words = clause.split()
+                        temp_clause = ""
+                        
+                        for word in words:
+                            if len(temp_clause) + len(word) + 1 > self.max_chunk_size:
+                                if temp_clause:
+                                    current_chunk.append(temp_clause.strip())
+                                    current_length += len(temp_clause) + 1
+                                    
+                                    if current_length >= self.max_chunk_size:
+                                        chunk_text = " ".join(current_chunk)
+                                        overlap_chunks = self.create_word_boundary_overlap(
+                                            current_chunk, self.overlap
+                                        )
+                                        
+                                        chunks.append(self._create_chunk_dict(
+                                            chunk_text,
+                                            overall_composition,
+                                            len(" ".join(overlap_chunks))
+                                        ))
+                                        
+                                        current_chunk = overlap_chunks.copy()
+                                        current_length = sum(len(c) + 1 for c in current_chunk)
+                                        current_length = max(0, current_length - 1)
+                                
+                                temp_clause = word
+                            else:
+                                temp_clause += (" " + word) if temp_clause else word
+                        
+                        if temp_clause:
+                            current_chunk.append(temp_clause.strip())
+                            current_length += len(temp_clause) + 1
+                    else:
+                        # Normal clause processing
+                        if current_length + clause_length + 1 > self.max_chunk_size:
+                            if current_chunk:
+                                chunk_text = " ".join(current_chunk)
+                                overlap_chunks = self.create_word_boundary_overlap(
+                                    current_chunk, self.overlap
+                                )
+                                
+                                chunks.append(self._create_chunk_dict(
+                                    chunk_text,
+                                    overall_composition,
+                                    len(" ".join(overlap_chunks))
+                                ))
+                                
+                                current_chunk = overlap_chunks.copy()
+                                current_length = sum(len(c) + 1 for c in current_chunk)
+                                current_length = max(0, current_length - 1)
+                        
+                        current_chunk.append(clause)
+                        current_length += clause_length + 1
+            else:
+                # Normal sentence
+                current_chunk.append(sentence)
+                current_length += sent_length + 1
 
-        # Add final chunk
+        # Handle final chunk
         if current_chunk and current_length >= self.min_chunk_size:
-            chunks.append({
-                "text": " ".join(current_chunk),
-                "metadata": {
-                    "language": language,
-                    "length_chars": current_length,
-                    "has_sentence_end": any(
-                        sentence.endswith(tuple(self.sentence_separators))
-                        for sentence in current_chunk
-                    ),
-                    "overlap_with_next": 0  # No next chunk
-                }
-            })
+            chunk_text = " ".join(current_chunk)
+            chunks.append(self._create_chunk_dict(
+                chunk_text,
+                overall_composition,
+                0  # No overlap for final chunk
+            ))
 
         return chunks
 
-    def _finalize_chunk(self, chunk: List[str], language: str, overlap_buffer: List[str]) -> Dict:
-        """Prepare a complete chunk with metadata"""
-        chunk_text = " ".join(chunk)
+    def _create_chunk_dict(self, text: str, overall_composition: Dict[str, float], overlap_length: int) -> Dict:
+        """Create a standardized chunk dictionary with metadata"""
+        chunk_composition = self.detect_script_composition(text)
+        language = self.classify_language(text)
+        
         return {
-            "text": chunk_text,
+            "text": text,
             "metadata": {
                 "language": language,
-                "length_chars": len(chunk_text),
+                "length_chars": len(text),
+                "bengali_ratio": chunk_composition["bengali"],
+                "english_ratio": chunk_composition["english"],
                 "has_sentence_end": any(
-                    s.endswith(tuple(self.sentence_separators)) for s in chunk
+                    text.rstrip().endswith(sep) for sep in self.sentence_separators
                 ),
-                "overlap_with_next": sum(len(x) for x in overlap_buffer)
+                "overlap_with_next": overlap_length,
+                "word_count": len(text.split()),
+                "has_discourse_markers": any(
+                    marker in text for marker in self.discourse_markers
+                )
             }
         }
 
-    def _update_overlap_buffer(self, current_chunk: List[str], target_overlap: int) -> List[str]:
-        """Maintain overlap context between chunks"""
-        overlap_buffer = []
-        overlap_length = 0
-        
-        # Add sentences from end until we reach target overlap
-        for sentence in reversed(current_chunk):
-            sent_length = len(sentence)
-            if overlap_length + sent_length > target_overlap:
-                break
-            overlap_buffer.insert(0, sentence)
-            overlap_length += sent_length
-            
-        return overlap_buffer
-
-# Example Usage
+# Example usage and testing
 if __name__ == "__main__":
     # Sample Bengali text with mixed content
     sample_text = """
     মামা বিবাহ-বাড়িতে ঢুকিয়া খুশি হইলেন না। একে তো উঠানটাতে বরযাত্রীদের জায়গা সংকুলান হওয়াই শক্ত,
-তাহার পরে সমস্ত আয়োজন নিতান্ত মধ্যম রকমের। ইহার পরে শন্কুনাথবাবুর ব্যবহারটাও নেহাত ঠান্ডা। তার
-বিনয়টা অজজ্র নয়। মুখে তো কথাই নাই কোমরে চাদর বাধা, গলা ভাঙা, টাক-পড়া, মিশ-কালো এবং বিপুল-
-কন্দর্ট পাটির করতাল-বাজিয়ে হইতে শুরু করিয়া বরকর্তাদের প্রত্যেককে বার বার প্রচুররূপে অভিষিক্ত
-করিয়া না দিতেন তবে গোড়াতেই এটা এসপার-ওসপার হইত।
-আমি সভায় বসিবার কিছুক্ষণ পরেই মামা শস্তুনাথবাবুকে পাশের ঘরে ডাকিয়া লইয়া গেলেন। কী কথা হইল
-জানি না, কিছুক্ষণ পরেই শস্তুনাথবাবু আমাকে আসিইয়া বলিলেন, “বাবাজি, একবার এই দিকে আসতে
-হচ্ছে।”
-ব্যাপারখানা এই। -সকলে না হউক, কিন্তু কোনো চর পন + ভু
-সওগাদ লোক-বিদায় প্রভৃতি সম্বন্ধে যেরকম এ ্
-টানাটানির পরিচয় পাওয়া গেছে তাহাতে মামা
-ঠিক করিয়াছিলেন- দেওয়া-থোওয়া সম্বন্ধে এ লোকটির শুধু মুখের কথার উপর ভর করা চলিবে না। সেইজন্য
-বাড়ির সেকরাকে সুদ্ধ সঙ্গেআনিয়াছিলেন। পাশের ঘরে গিয়া দেখিলাম, মামা এক তক্তপোশে এবং সেকরা
-তাহার দীড়িপাল্লা কষ্টিপাথর প্রভৃতি লইয়া মেঝেয় বসিয়া আছে।
-শস্তুনাথবাবু আমাকে বলিলেন, “তোমার মামা বলিতেছেন বিবাহের কাজ শুরু হইবার আগেই তিনি কনের
-আমি মাথা হেট করিয়া চুপ করিয়া রহিলাম।
-মামা বলিলেন, “ও আবার কী বলিবে। আমি যা বলিব তাই হইবে।”
-শস্তুনাথবাবু আমার দিকে চাহিয়া কহিলেন, “সেই কথা তবে ঠিক? উনি যা বলিলেন তাই হইবে? এ সম্বন্ধে
-আমি একটু ঘাড়-নাড়ার ইঙ্গিতে জানাইলাম, এসব কথায় আমার সম্পুর্ণ অনধিকার।
-মামা বলিলেন, “অনুপম এখানে কি করিবে। ও সভায় গিয়ে বসুক।”
-কিছুক্ষণ পরে তিনি একখানা গামছায় বাঁধা গহনা আনিয়া তক্তপোশের উপর মেলিয়া ধরিলেন। সমস্তই তাহার
-সেকরা গহনা হাতে তুলিয়া লইয়া বলিল, “এ আর দেখিব কী। ইহাতে খাদ নাই-এমন সোনা এখনকার দিনে
-ব্যবহারই হয় না।
+    তাহার পরে সমস্ত আয়োজন নিতান্ত মধ্যম রকমের। ইহার পরে শঙ্কুনাথবাবুর ব্যবহারটাও নেহাত ঠান্ডা। 
+    কিন্তু তার বিনয়টা অজাত্র নয়। This is an English sentence mixed in. মুখে তো কথাই নাই কোমরে চাদর বাঁধা, 
+    গলা ভাঙা, টাক-পড়া, মিশ-কালো এবং বিপুল-কণ্ঠের একটা লোক AI technology ব্যবহার করে কাজ করছে।
+    তবে আমি সভায় বসিবার কিছুক্ষণ পরেই মামা শঙ্কুনাথবাবুকে পাশের ঘরে ডাকিয়া লইয়া গেলেন।
     """
 
-    # Initialize chunker with recommended settings for Bengali
+    # Initialize enhanced chunker
     chunker = BengaliChunker(
         max_chunk_size=300,
-        overlap=50,
-        min_chunk_size=30
+        overlap=80,
+        min_chunk_size=50
     )
 
     # Process text
@@ -228,5 +357,11 @@ if __name__ == "__main__":
     print(f"Generated {len(chunks)} chunks:\n")
     for i, chunk in enumerate(chunks, 1):
         print(f"Chunk {i}:")
-        print(f"Text: {chunk['text']}")
-        print(f"Metadata: {chunk['metadata']}\n")
+        print(f"Text: {chunk['text'][:100]}{'...' if len(chunk['text']) > 100 else ''}")
+        print(f"Language: {chunk['metadata']['language']}")
+        print(f"Bengali ratio: {chunk['metadata']['bengali_ratio']:.2f}")
+        print(f"English ratio: {chunk['metadata']['english_ratio']:.2f}")
+        print(f"Length: {chunk['metadata']['length_chars']} chars")
+        print(f"Has discourse markers: {chunk['metadata']['has_discourse_markers']}")
+        print(f"Overlap with next: {chunk['metadata']['overlap_with_next']}")
+        print("-" * 50)
