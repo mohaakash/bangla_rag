@@ -1,5 +1,5 @@
 # Bangla RAG System
-![banner](assets\ragbanner.png)
+![banner](assets/ragbanner.png)
 This project is a Retrieval-Augmented Generation (RAG) system specifically designed for processing and querying documents in Bengali and English. It uses a sophisticated pipeline to extract text from PDF files, clean and chunk the text, generate embeddings, and use a Large Language Model (LLM) to answer questions based on the document content.
 
 ## Setup Guide
