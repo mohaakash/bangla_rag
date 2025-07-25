@@ -488,12 +488,12 @@ def main():
                 st.rerun()
                 
             except Exception as e:
-                st.error(f"❌ Error: {e}")
+                st.error(f" Error: {e}")
     
     # Footer
     st.markdown("""
     <div class="footer">
-        🤖 Bengali RAG Assistant | Enhanced with Mixed Language Support | Made with ❤️ using Streamlit
+        🤖 Bengali RAG Assistant | Enhanced with Mixed(Bn/En) Language Support | Made with ❤️ using Streamlit
     </div>
     """, unsafe_allow_html=True)
 
