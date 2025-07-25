@@ -2,7 +2,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain_core.prompts import ChatPromptTemplate
-from db import BengaliVectorStore
+from .db import BengaliVectorStore
 import os
 from typing import Dict
 from dotenv import load_dotenv
@@ -43,7 +43,7 @@ class BengaliRAGSystem:
         # Create retrieval chain
         self.retrieval_chain = ConversationalRetrievalChain.from_llm(
             llm=self.llm,
-            retriever=vector_store.as_retriever(k=7),
+            retriever=vector_store.as_retriever(k=8),
             memory=self.memory,
             combine_docs_chain_kwargs={"prompt": self.prompt},
             return_source_documents=True,
