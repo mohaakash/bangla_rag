@@ -1,3 +1,4 @@
+
 # Byte-code files
 *.pyc
 __pycache__/
@@ -24,6 +25,13 @@ chroma_store/
 *.env
 GEMINI.md
 test.py
-outputs
-cleaned_outputs
-env
+outputs/
+temp/
+
+# RAG specific files
+bengali_vector_db/
+chat_history.json
+db.sqlite3
+*.pdf
+*.faiss
+*.pkl
