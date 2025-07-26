@@ -123,7 +123,7 @@ Here are some examples:
     (SEE ragas_evaluation.csv for more)
 
 ### ScreenShot
-![banner](assets/screenshot.png)
+![Screenshot](assets/Screenshot.png)
 
 ## API Documentation
 
