@@ -134,7 +134,7 @@ This API provides access to a Retrieval-Augmented Generation (RAG) system that c
 ### Quick Start
 
 #### Prerequisites
-1. Navigate to project directory: `C:\Users\Mohammad Akash\Documents\projects\bangla_rag\backend\rag_project`
+1. Navigate to project directory: `bangla_rag\backend\rag_project`
 2. Start Django development server: `python manage.py runserver`
 3. API will be available at: `http://127.0.0.1:8000`
 
