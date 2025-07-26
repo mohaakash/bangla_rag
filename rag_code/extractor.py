@@ -1,5 +1,5 @@
 import pytesseract
-import fitz  # PyMuPDF
+import pymupdf
 from PIL import Image
 import io
 import os
@@ -104,7 +104,7 @@ def clean_extracted_text(text):
 def pdf_to_images(pdf_path, dpi=300, start_page=None, end_page=None):
     images = []
     try:
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
         start = (start_page - 1) if start_page is not None else 0
         end = end_page if end_page is not None else len(doc)
         
@@ -119,7 +119,7 @@ def pdf_to_images(pdf_path, dpi=300, start_page=None, end_page=None):
                 continue
                 
             page = doc.load_page(page_num)
-            mat = fitz.Matrix(dpi/72, dpi/72)
+            mat = pymupdf.Matrix(dpi/72, dpi/72)
             pix = page.get_pixmap(matrix=mat)
             img_data = pix.tobytes("ppm")
             img = Image.open(io.BytesIO(img_data))
