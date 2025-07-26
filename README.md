@@ -235,7 +235,7 @@ Content-Type: application/json
 
 #### Prerequisites
 1. **Django Development Server**: Ensure your Django development server is running
-2. **Project Location**: Navigate to `C:\Users\Mohammad Akash\Documents\projects\bangla_rag\backend\rag_project`
+2. **Project Location**: Navigate to `bangla_rag\backend\rag_project`
 3. **Start Server**: Run `python manage.py runserver`
 
 #### Testing with Postman
@@ -303,7 +303,7 @@ For debugging server-side issues, check the Django development server terminal f
 
 ### Notes
 - This API is designed for development and testing purposes
-- Ensure your RAG system knowledge base is properly configured before testing
+- Ensure RAG system knowledge base is properly configured before testing
 - Response times may vary depending on the complexity of the question and the size of your knowledge base
 
 
@@ -419,7 +419,7 @@ I used the **`paraphrase-multilingual-MiniLM-L12-v2`** model from the `sentence-
 
 **Why I chose it:**
 
--   **Multilingual:** This model is specifically trained on a large corpus of text in over 50 languages, including Bengali and English. This makes it ideal for this project, as it can effectively generate embeddings for both languages.
+-   **Multilingual:** This model is specifically trained on a large corpus of text in over 50 languages, including Bengali and English. This makes it ideal for this project, as it can effectively generate embeddings for both Bangla and English languages.
 -   **Performance:** It offers a good balance between performance and size. It's small enough to run efficiently on a CPU, but powerful enough to generate high-quality embeddings.
 -   **Semantic Understanding:** It's a "paraphrase" model, which means it's trained to understand the semantic similarity between sentences. It can recognize that two sentences have a similar meaning even if they use different words.
 -   **Normalization:** The embeddings are normalized, which makes them suitable for use with similarity metrics like cosine similarity.
