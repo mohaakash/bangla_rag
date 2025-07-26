@@ -19,11 +19,9 @@ Thumbs.db
 # Generated files
 cleaned_text.txt
 test_output.txt
-chroma_store/
 
 .env
 *.env
-GEMINI.md
 test.py
 outputs/
 temp/
