@@ -2,6 +2,48 @@
 ![banner](assets/ragbanner.png)
 This project is a Retrieval-Augmented Generation (RAG) system specifically designed for processing and querying documents in Bengali and English. It uses a sophisticated pipeline to extract text from PDF files, clean and chunk the text, generate embeddings, and use a Large Language Model (LLM) to answer questions based on the document content.
 
+
+The core logic of the RAG system is organized into several modules in the `rag_code` directory:
+
+-   `extractor.py`: Handles the extraction of text from PDF files. It converts PDF pages to images and then uses Tesseract OCR to extract the text. It also includes extensive text cleaning functions.
+-   `chunker.py`: Implements a custom chunking strategy for Bengali and mixed-language text. It splits the text into smaller, semantically meaningful chunks.
+-   `embedder.py`: Generates vector embeddings for the text chunks using a pre-trained Hugging Face model.
+-   `db.py`: Manages the FAISS vector store, including creating, saving, and loading the vector database.
+-   `llm.py`: Contains the main RAG pipeline, including the LLM, conversational memory, and the retrieval chain.
+-   `app.py`: The main Streamlit application that provides a user interface for interacting with the RAG system.
+
+### System Diagram
+
+```mermaid
+%%{init: {'themeVariables': {'fontSize': '10px'}, 'config': {'nodeSpacing': 5, 'rankSpacing': 10}}}%%
+graph TD
+    subgraph "Indexing Pipeline 🛠️"
+        A[📄 PDF Document] --> B{extractor.py}
+        B --> |Cleaned Text| C{chunker.py}
+        C --> |Text Chunks| D{embedder.py}
+        D --> |Vector Embeddings| E[📊 FAISS Vector Store]
+    end
+
+    subgraph "Retrieval & Generation Pipeline ⚡"
+        F[❓ User Query] --> G{embedder.py}
+        G --> |Query Embedding| H{Retriever}
+        E --> H
+        H --> |Relevant Chunks| I{llm.py}
+        F --> I
+        I --> J[✨ Generated Answer]
+    end
+
+    %% Styling
+    classDef pipeline fill:#f0f8ff,stroke:#4682b4,stroke-width:2px,color:#333,stroke-dasharray:5
+    classDef input fill:#e6e6fa,stroke:#9370db,stroke-width:2px,color:#333
+    classDef output fill:#98fb98,stroke:#3cb371,stroke-width:2px,color:#333
+    classDef process fill:#ffebcd,stroke:#daa520,stroke-width:2px,color:#333,stroke-dasharray:0
+
+    class A,F input
+    class E,J output
+    class B,C,D,G,H,I process
+    class indexing,retrieval pipeline
+```
 ## Setup Guide
 
 1.  **Clone the repository:**
@@ -75,48 +117,270 @@ Here are some examples:
 -   **Query:** "কাকে অনুপমের ভাগ্য দেবতা বলে উল্লেখ করা হয়েছে?"
 -   **Output:** "অনুপমের মামাকে"
 
+-   **Query:** "বিয়ের সময় কল্যাণীর প্রকৃত বয়স কত ছিল?"
+-   **Output:** "বিয়ের সময় কল্যাণীর প্রকৃত বয়স পনেরো বছর ছিল"
+
+    (SEE ragas_evaluation.csv for more)
+
+### ScreenShot
+![banner](assets/screenshot.png)
+
 ## API Documentation
 
-The core logic of the RAG system is organized into several modules in the `rag_code` directory:
 
--   `extractor.py`: Handles the extraction of text from PDF files. It converts PDF pages to images and then uses Tesseract OCR to extract the text. It also includes extensive text cleaning functions.
--   `chunker.py`: Implements a custom chunking strategy for Bengali and mixed-language text. It splits the text into smaller, semantically meaningful chunks.
--   `embedder.py`: Generates vector embeddings for the text chunks using a pre-trained Hugging Face model.
--   `db.py`: Manages the FAISS vector store, including creating, saving, and loading the vector database.
--   `llm.py`: Contains the main RAG pipeline, including the LLM, conversational memory, and the retrieval chain.
--   `app.py`: The main Streamlit application that provides a user interface for interacting with the RAG system.
+### Overview
+This API provides access to a Retrieval-Augmented Generation (RAG) system that can answer questions using retrieved document sources. The system is built with Django and provides intelligent responses based on your knowledge base.
+
+### Quick Start
+
+#### Prerequisites
+1. Navigate to project directory: `C:\Users\Mohammad Akash\Documents\projects\bangla_rag\backend\rag_project`
+2. Start Django development server: `python manage.py runserver`
+3. API will be available at: `http://127.0.0.1:8000`
+
+### Base URL
+```
+http://127.0.0.1:8000
+```
+
+### Authentication
+Currently, no authentication is required for this API.
+
+### Endpoints
+
+#### Chat Endpoint
+
+##### POST `/api/chat/`
+
+Send a message to the RAG system and receive an intelligent response based on the available knowledge base.
+
+**Request Headers:**
+```
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "message": "string"
+}
+```
+
+**Parameters:**
+| Parameter | Type   | Required | Description                           |
+|-----------|--------|----------|---------------------------------------|
+| message   | string | Yes      | The question or message to send to the RAG system |
+
+**Example Request:**
+```json
+{
+    "message": "What is the capital of Bangladesh?"
+}
+```
+
+**Response Format:**
+
+**Success Response (200 OK):**
+```json
+{
+    "response": "The answer from your RAG system.",
+    "sources": [
+        // Array of source document metadata
+    ]
+}
+```
+
+**Response Fields:**
+| Field    | Type   | Description                                    |
+|----------|--------|------------------------------------------------|
+| response | string | The generated answer from the RAG system      |
+| sources  | array  | Metadata about the source documents used (optional) |
+
+### Error Responses
+
+#### 400 Bad Request
+**Cause:** Invalid request format, missing required fields, or malformed JSON.
+
+**Example Response:**
+```json
+{
+    "error": "Invalid request format",
+    "detail": "Message field is required"
+}
+```
+
+#### 405 Method Not Allowed
+**Cause:** Using an HTTP method other than POST.
+
+**Example Response:**
+```json
+{
+    "error": "Method not allowed",
+    "detail": "Only POST method is supported"
+}
+```
+
+#### 500 Internal Server Error
+**Cause:** Server-side error in RAG system initialization or processing.
+
+**Example Response:**
+```json
+{
+    "error": "Internal server error",
+    "detail": "RAG system processing failed"
+}
+```
+
+### Setup and Testing
+
+#### Prerequisites
+1. **Django Development Server**: Ensure your Django development server is running
+2. **Project Location**: Navigate to `C:\Users\Mohammad Akash\Documents\projects\bangla_rag\backend\rag_project`
+3. **Start Server**: Run `python manage.py runserver`
+
+#### Testing with Postman
+
+1. **Create New Request**
+   - Open Postman
+   - Click "+" or "New" to create a new request
+
+2. **Configure Request**
+   - **Method**: POST
+   - **URL**: `http://127.0.0.1:8000/api/chat/`
+   - **Headers**: 
+     - Key: `Content-Type`
+     - Value: `application/json`
+
+3. **Request Body**
+   - Select "Body" tab
+   - Choose "raw" option
+   - Select "JSON" from dropdown
+   - Enter your JSON payload
+
+4. **Send Request**
+   - Click "Send" button
+   - Review response in the bottom panel
+
+#### Example Usage
+
+**Request:**
+```bash
+curl -X POST http://127.0.0.1:8000/api/chat/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is the capital of Bangladesh?"
+  }'
+```
+
+**Response:**
+```json
+{
+    "response": "The capital of Bangladesh is Dhaka. It is the largest city and the political, economic, and cultural center of the country.",
+    "sources": [
+        {
+            "document_id": "doc_001",
+            "title": "Bangladesh Overview",
+            "relevance_score": 0.95
+        }
+    ]
+}
+```
+
+###  Status Codes
+
+| Code | Description                    |
+|------|--------------------------------|
+| 200  | Success - Request processed successfully |
+| 400  | Bad Request - Invalid input    |
+| 405  | Method Not Allowed - Wrong HTTP method |
+| 500  | Internal Server Error - Server-side error |
+
+### Rate Limiting
+Currently, no rate limiting is implemented. For production use, consider implementing appropriate rate limiting mechanisms.
+
+### Support
+For debugging server-side issues, check the Django development server terminal for detailed error messages and stack traces.
+
+### Notes
+- This API is designed for development and testing purposes
+- Ensure your RAG system knowledge base is properly configured before testing
+- Response times may vary depending on the complexity of the question and the size of your knowledge base
+
 
 ## Evaluation Matrix
 
-| Metric                  | Score | Notes                                                                                                                                 |
-| ----------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Retrieval Precision** | 00   | Measures the percentage of retrieved documents that are relevant to the query.                                                        |
-| **Retrieval Recall**    | 00   | Measures the percentage of all relevant documents that are successfully retrieved.                                                    |
-| **Answer Relevance**    | 00   | Assesses how well the generated answer addresses the user's question.                                                                 |
-| **Answer Faithfulness** | 00   | Measures whether the generated answer is factually consistent with the information in the retrieved documents.                        |
-| **Latency**             | 00   | The time it takes for the system to generate a response after receiving a query.                                                      |
-| **Language Support**    | Good  | The system is designed to handle both Bengali and English, with a focus on Bengali-specific text processing and cleaning.             |
+### RAGAS Evaluation Results (Bengali QA)
 
+| Question                                                                 | Answer Relevancy | Answer Correctness | Semantic Similarity | Faithfulness | Context Recall | Context Precision |
+|--------------------------------------------------------------------------|------------------|--------------------|---------------------|--------------|----------------|-------------------|
+| **"মঙ্গলঘট ভরা ছিল' উক্তি দ্বারা কী ইঙ্গিত করা হয়েছে?"**               | -                | -                  | 0.99                | 1.0          | 0.0            | 1.0               |
+| **"রবীন্দ্রনাথ ঠাকুর কত খষ্টাব্দে মৃত্যুবরণ করেন?"**                  | -                | 0.998              | 0.993               | -            | -              | 0.0               |
+| **"অনুপমের বয়স কত?"**                                                  | 0.717            | 0.998              | 0.992               | -            | 0.0            | 1.0               |
+| **"অনুপমের মতে, তার প্রকৃত ভাগ্যদেবতা কে?"**                           | -                | -                  | 1.0                 | -            | -              | -                 |
+| **"অপরিচিতা' গল্পে কোন সামাজিক প্রথার সমালোচনা করা হয়েছে?"**          | 0.583            | -                  | 1.0                 | 0.0          | -              | 1.0               |
+| **"অনুপমের বাবা কী কাজ করে জীবিকা নির্বাহ করতেন?"**                    | 0.735            | 0.991              | 0.964               | -            | -              | 1.0               |
+| **"অনুপমের ভাষায় সুপুরুষ কাকে বলা হয়েছে?"**                           | 0.0              | -                  | 0.986               | 0.0          | 1.0            | 1.0               |
+| **"কাকে অনুপমের ভাগ্য দেবতা বলে উল্লেখ করা হয়েছে?"**                   | 0.643            | 0.998              | 0.993               | -            | 1.0            | 1.0               |
+| **"বিয়ের সময় কল্যাণীর প্রকৃত বয়স কত ছিল?"**                          | -                | 0.993              | 0.974               | 0.0          | 1.0            | 1.0               |
+
+#### **Key Insights**:
+- **High Semantic Similarity (0.95+)** for most answers, meaning the LLM captures the **intent** well.
+- **Faithfulness issues** (e.g., "অপরিচিতা" and "সুপুরুষ" examples) where answers aren’t fully grounded in contexts.
+- **Context Precision is consistently high (1.0)**, confirming retrieved contexts are relevant.
+
+### Aggregate RAGAS Metrics (Average Scores)
+
+| Metric               | Average Score |
+|----------------------|---------------|
+| Answer Relevancy     | 0.536         |
+| Answer Correctness   | 0.996         |
+| Semantic Similarity  | 0.988         |
+| Faithfulness         | 0.25          |
+| Context Recall       | 0.5           |
+| Context Precision    | 0.89          |
+
+**Interpretation**:  
+- **Strengths**: High correctness (0.996) and semantic alignment (0.988).  
+- **To Improve**: Faithfulness (0.25) and context recall (0.5) need urgent attention.  
+
+### Note: THE QUESTION/ANSWER DATASET WAS VERY SMALL RESULT (SEE ragas_evaluation.csv for more)
 ---
 
-## Technical Deep Dive
+## Question answers
 
 ### 1. What method or library did you use to extract the text, and why? Did you face any formatting challenges with the PDF content?
 
-I used a combination of **PyMuPDF (fitz)** and **Pytesseract** for text extraction. Here's the process:
+I used a combination of **PyMuPDF** and **Pytesseract** for text extraction. Here's the process:
 
 1.  **PDF to Images:** The `pdf_to_images` function in `extractor.py` uses `fitz.open()` to open the PDF file. It then iterates through the pages, converts each page into a high-resolution image (300 DPI), and stores it as a Pillow `Image` object. This approach was chosen because many Bengali PDFs are image-based or have complex layouts that make direct text extraction unreliable.
 
-2.  **OCR on Images:** The `ocr_images_to_text` function then uses `pytesseract.image_to_string` to perform Optical Character Recognition (OCR) on each image. The language is explicitly set to Bengali (`-l ben`) to improve accuracy.
+2.  **OCR on Images:** The `ocr_images_to_text` function then uses `pytesseract.image_to_string` to perform Optical Character Recognition (OCR) on each image. The language is explicitly set to Bengali (`l ben`) to improve accuracy.
+
 
 **Formatting Challenges:**
 
 Yes, I faced several formatting challenges, Especially the font breaking problem:
+```
+FONT BREAKING PROBLEM:  
+just text ectraction:  আিআমািব্ সসাতািমাত্র।এিীব্নটানাদদকঘিযি র্হসাকব্ ব়্ে, না গুকনি র্হসাকব্। তব্ু ইহাি একটু র্ব্কিষ
+ মূলয আকি।ইহা যসই ফু কলি মকতা োহাি ব্ুককি উপকি ভ্রমি আর্স া ব্র্স ার্িল, এব্ং যসই পদকক্ষকপি ইর্তহাস
+ তাহাি িীব্কনি মাঝখাকনফকলিমকতা গুটি ধর্ি া উঠি াকি।  
 
--   **Complex Layouts:** The PDF contained multi-column layouts, tables, and decorative elements that interfered with standard text extraction. The image-based OCR approach helped mitigate this by treating the page as a single image.
+With OCR: আজ আমার বয়স সাতাশ মাত্র। এ জীবনটা না দৈর্ঘ্যের হিসাবে বড়, না গুনের হিসাবে।
+তবু ইহার একটু বিশেষ মূল্য আছে।ইহা সেই ফুলের মতো যাহার বুকের উপরে ভ্রমর আসিয়া বসিয়াছিল, এবং সেই পদক্ষেপের ইতিহাস সেই ইতিহাসটুকু আকারে ছোটো, তাহাকে ছোটো করিয়াই লিখিব। 
+```
+-   **Complex Layouts:** The PDF contained tables, and decorative elements that interfered with standard text extraction. The image-based OCR approach helped mitigate this by treating the page as a single image.
 -   **Embedded Fonts:** Some PDFs use non-standard or embedded fonts for Bengali characters, which are not always correctly interpreted by direct text extraction libraries. OCR provides a more robust solution in these cases.
 -   **Noise and Artifacts:** Scanned documents often have noise, skew, and other artifacts. While the current implementation doesn't include advanced image pre-processing (like deskewing or noise reduction), the high DPI helps improve the quality of the OCR input.
 -   **Incorrect Character Recognition:** Tesseract, while powerful, is not perfect. I had to implement extensive post-processing and cleaning functions (`clean_extracted_text` in `extractor.py`) to correct common OCR errors, remove irrelevant text (like page numbers and headers), and standardize punctuation.
+also MCQs wrong ansers has been removed,
+```
+    Before Cleaning: ৪। 'অপরিচিতা' গল্পে বলায় পটু কে? [রা. বো. '২২](ক) অনুপম(খ) মামা(গ) বিনুলা(ঘ) হরিণ
+    উত্তর: ঘ"
+
+    After cleaning: ৪। 'অপরিচিতা' গল্পে গল্প বলায় পটু কে? উত্তর: হরিশ
+```
+
 
 ### 2. What chunking strategy did you choose (e.g. paragraph-based, sentence-based, character limit)? Why do you think it works well for semantic retrieval?
 
@@ -127,6 +391,20 @@ I implemented a custom, hybrid chunking strategy in the `BengaliChunker` class. 
 -   **Discourse Marker Splitting:** It also uses a list of Bengali discourse markers (e.g., `কিন্তু`, `তবে`, `সেজন্য`) to identify natural semantic boundaries within the text.
 -   **Character Limits:** It uses `max_chunk_size` (400 characters) and `min_chunk_size` (200 characters) to ensure that the chunks are of a reasonable size for the embedding model.
 -   **Word-Boundary Aware Overlap:** It creates an overlap of 50 characters between chunks to maintain context. The overlap is created at a word boundary to avoid splitting words in the middle.
+
+chunking strategy diagram :
+
+
+```mermaid
+%%{init: {'themeVariables': {'fontSize': '10px'}, 'config': {'nodeSpacing': 5, 'rankSpacing': 10}}}%%
+graph TD
+    A[Original Text] --> B{Sentence Split}
+    B -->|Success| C[Chunk by Sentences]
+    B -->|Too Long| D[Clause Split]
+    C --> E[Apply Overlap]
+    D --> E
+    E --> F[Final Chunks]
+```
 
 **Why it works well for semantic retrieval:**
 
@@ -201,7 +479,7 @@ The relevance of the results is generally good, but there is always room for imp
     -   **Improvement:** Using a larger, more comprehensive, and well-structured document would improve the results.
 
 -   **Retrieval Strategy:**
-    -   **Issue:** The current retriever uses a fixed `k` value of 8. This might not be optimal for all queries.
+    -   **Issue:** The current retriever uses a fixed `k` value of 3. This might not be optimal for all queries.
     -   **Improvement:** A more dynamic retrieval strategy could be used. For example, the number of retrieved chunks could be adjusted based on the complexity of the query or the diversity of the retrieved results.
 
 -   **LLM:**
